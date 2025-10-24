@@ -1,5 +1,5 @@
 
-# __OVERVIEW
+# Initial access on Jenkins and liferay + Transfering files through the groovy script console
 Have you ever been in an engagement or CTF where you finally find a Groovy script console… and then discover outbound connections are blocked? or you can't get tools to the target using built in upload methods?
 view detailed writeup in [this blog post](https://vipa0z.github.io/2025/10/22/Remote%20Code%20Execution%20in%20liferay-jenkins/)
 Over the next few minutes I’ll show a practical, repeatable approach for turning a Groovy console into a persistent, multithreaded JSP bind shell that lives in the webroot and how to transfer binary tools via base64 encoding (small and large size). this guide serves as a proof of concept, the shell in here is not secure enough for opsec, but it’s a starting point for you to build upon.
