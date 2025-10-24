@@ -101,37 +101,37 @@ byte[] bytes = Base64.getDecoder().decode(b64)
 Files.write(dest, bytes)
 println "Wrote ${bytes.length} bytes to ${dest}"
 ```
-
-for larger binaries: i created the script below to chunk your tools into smaller base64 files with each file containing a variable with 6000 characters. that can then be pasted into the console and later combined by groovy.
-https://raw.githubusercontent.com/vipa0z/Groovy-bind-shell/refs/heads/main/tool_chunker.py
-
-base64 encode your tools, run the python script and copy the output to the clipboard:
-```shell
+#### For Larger Binaries
+I put together a script that chunks your tools into smaller base64 files (6000 chars per chunk by default), so you can paste them into the console and reassemble them with Groovy.
+Script: https://raw.githubusercontent.com/vipa0z/Groovy-bind-shell/refs/heads/main/tool_chunker.py
+run:
+```
 python3 tool_chunker.py yourtool.exe -o <output_dir> -s 6000
+
+**Options:**
+- `-s`: chunk size (default 6000)
+- `-o`: output directory
+- `-h`: help
 ```
-`-s`: size of each chunk
-`-o`: output directory
-`-h`: help
-the script will save the chunks in the output directory with the format `part1`, `part2`, etc.
-the script has instructions on what to do next:
-example usage:
+
+The script outputs numbered chunks (`part1`, `part2`, etc.) and shows you what to do next.
+
+**Example:**
 ```
- python3 tool_chunker.py -s 6000 XecretsEz  -o xcretsez 
+python3 tool_chunker.py -s 6000 XecretsEz -o xcretsez
 ```
 <img width="819" height="261" alt="image" src="https://github.com/user-attachments/assets/f5e1bf7f-6916-4ca2-bdf5-de0d7caa424b" />
+Steps
+Run the script as shown above
+Paste into the script console
+Copy the Groovy reassembly code from the script output and paste it below your base64 blobs
+Double-check the write path is correct
+Save and run
 
-2. browse to the output directory and run cat + copy to clipboard
+Verify It Worked
+After dropping the file, sanity check it:
 
-3.paste your clipboard content into the script console
+Compare file size
+Hash it (MD5/SHA256) and compare with the original
 
-4. go back to `tool_chunker.py` output and copy the groovy POC  to your console under the base64 blobs.
-5. ensure the write path is correct
-6. hit save and pray it works
-
-#### Reliable verification & simple sanity checks
-
-After dropping:
-- Check size and checksum: read file bytes and print length or MD5 Hash to verify it was transfered correctly.
-
-That’s a wrap. Quick checklist before you go:  find writable paths, use base64 or chunked base64, verify integrity, and delete artifacts when finished.
-Thanks for reading.
+That's it! Quick recap: find writable paths, use base64 (chunked if needed), verify integrity, and clean up your artifacts when done.
