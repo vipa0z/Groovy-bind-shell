@@ -1,5 +1,5 @@
 # Bind Shell From Groovy Script Console
-a script to write JSP webshells and execute them via the web root. useful for engagements with jenkins\liferay where the script console is enabled and the network firewall is blocking outgoing traffic.
+a script to write JSP webshells and execute them via the web root. useful for engagements with jenkins\liferay where you don't have the ability to abuse legitimate upload functionalities in platforms such as liferay/jenkins but  script console is enabled and the network firewall is blocking outgoing traffic.
 Built for Offensive security tasks and CTF junkies who hate fragile shells.
 
 #### Info
