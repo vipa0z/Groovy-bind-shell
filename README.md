@@ -107,12 +107,11 @@ Script: https://raw.githubusercontent.com/vipa0z/Groovy-bind-shell/refs/heads/ma
 run:
 ```
 python3 tool_chunker.py yourtool.exe -o <output_dir> -s 6000
-
+```
 **Options:**
 - `-s`: chunk size (default 6000)
 - `-o`: output directory
 - `-h`: help
-```
 
 The script outputs numbered chunks (`part1`, `part2`, etc.) and shows you what to do next.
 
